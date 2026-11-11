@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSD 寫入放大入門</title>
+<meta name="description" content="給非資工同學的教學簡報：SSD 為什麼會寫得比你要求的多？內容全部來自本專案的 LLM Wiki。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef1f4; --stage: #ffffff; --ink: #1d2733; --soft: #5b6878; --line: #d9dfe6;
+    --accent: #0f766e; --accent-2: #c2410c; --valid: #14b8a6; --stale: #cbd5e1; --new: #f97316;
+    --tint: #e6f4f2; --warm: #fff1e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1318; --stage: #161d24; --ink: #e6edf3; --soft: #9aa7b4; --line: #2a3540;
+      --accent: #2dd4bf; --accent-2: #fb923c; --valid: #0d9488; --stale: #475569; --new: #ea580c;
+      --tint: #10302d; --warm: #3a2414;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans TC", system-ui, sans-serif; }
+  .viewport { position: fixed; inset: 0; overflow: hidden; }
+  .deck { width: 1280px; height: 720px; position: absolute; left: 50%; top: 50%; transform-origin: center; }
+  .slide { position: absolute; inset: 0; background: var(--stage); border-radius: 18px;
+    padding: 56px 72px 64px; display: none; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,.12); }
+  .slide.active { display: flex; }
+  .part { font-size: 18px; font-weight: 700; letter-spacing: .15em; color: var(--accent); margin-bottom: 8px; }
+  .slide[data-part="代價"] .part { color: var(--accent-2); }
+  h1 { font-size: 64px; line-height: 1.2; margin: 0 0 16px; font-weight: 900; }
+  h2 { font-size: 44px; line-height: 1.25; margin: 0 0 24px; font-weight: 900; }
+  p, li { font-size: 26px; line-height: 1.6; }
+  p { margin: 0 0 14px; }
+  ul { margin: 0; padding-left: 1.1em; }
+  li { margin-bottom: 10px; }
+  .lead { color: var(--soft); font-size: 28px; }
+  .big { font-size: 96px; font-weight: 900; color: var(--accent-2); line-height: 1; margin: 24px 0; }
+  .body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .card { background: var(--tint); border-radius: 14px; padding: 22px 26px; }
+  .card.warm { background: var(--warm); }
+  .card h3 { margin: 0 0 8px; font-size: 26px; }
+  .card p { font-size: 22px; margin: 0; }
+  .formula { font-size: 34px; font-weight: 700; text-align: center; padding: 22px;
+    border: 3px solid var(--accent); border-radius: 14px; margin: 8px 0 24px; }
+  table { border-collapse: collapse; width: 100%; font-size: 24px; }
+  th, td { border-bottom: 2px solid var(--line); padding: 12px 14px; text-align: left; }
+  th { color: var(--soft); font-weight: 500; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .step { background: var(--tint); border-radius: 14px; padding: 16px; text-align: center; }
+  .step b { display: block; font-size: 30px; color: var(--accent); }
+  .step p { font-size: 20px; margin: 8px 0 0; }
+  .legend { display: flex; gap: 24px; justify-content: center; font-size: 20px; color: var(--soft); margin-top: 14px; }
+  .sw { display: inline-block; width: 18px; height: 18px; border-radius: 4px; vertical-align: -3px; margin-right: 6px; }
+  .chain { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 12px 0 28px; }
+  .chain span { background: var(--tint); border-radius: 12px; padding: 14px 18px; font-size: 24px; font-weight: 700; }
+  .chain i { font-style: normal; font-size: 28px; color: var(--soft); }
+  details { font-size: 24px; margin: 6px 0 18px; }
+  summary { cursor: pointer; color: var(--accent); }
+  .src { position: absolute; left: 72px; right: 72px; bottom: 22px; font-size: 15px; color: var(--soft);
+    border-top: 1px solid var(--line); padding-top: 10px; }
+  .src a { color: var(--soft); }
+  .controls { position: fixed; right: 18px; bottom: 14px; display: flex; gap: 8px; align-items: center; z-index: 5; }
+  .controls button { font: inherit; font-size: 18px; width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--stage); color: var(--ink); cursor: pointer; }
+  .counter { font-size: 15px; color: var(--soft); min-width: 64px; text-align: center; }
+  .progress { position: fixed; left: 0; top: 0; height: 4px; background: var(--accent); transition: width .2s; z-index: 5; }
+  svg text { font-family: inherit; fill: var(--ink); }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="viewport"><div class="deck" id="deck">
+
+<!-- 每張 slide 的 data-wiki 列出內容來源；tools/check_slides.py 會檢查數字都能在這些頁面找到。 -->
+
+<section class="slide" data-part="問題" data-wiki="concepts/write-amplification.md">
+  <div class="part">問題</div>
+  <div class="body">
+    <h1>你只存了 4GB，<br>SSD 卻寫了 5GB？</h1>
+    <p class="lead">這不是故障，而是 SSD 的正常運作方式，叫做<b>寫入放大</b>。</p>
+    <p class="lead">今天回答三件事：為什麼會多寫？多寫有什麼代價？怎麼減少？</p>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/write-amplification.md">Wiki › 寫入放大</a>（Solidigm 的計算例子）</div>
+</section>
+
+<section class="slide" data-part="原理" data-wiki="explainers/notebook-analogy.md">
+  <div class="part">原理</div>
+  <h2>先把 SSD 想成一疊筆記本</h2>
+  <div class="body">
+    <table>
+      <tr><th>SSD 裡的東西</th><th>筆記本比喻</th></tr>
+      <tr><td>block（區塊）</td><td>一本筆記本</td></tr>
+      <tr><td>page（頁）</td><td>筆記本的一頁</td></tr>
+      <tr><td>寫入資料</td><td>用原子筆寫，寫了就不能擦</td></tr>
+      <tr><td>擦除</td><td>只能把整本筆記本清空</td></tr>
+    </table>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/explainers/notebook-analogy.md">Wiki › 筆記本比喻</a>（教學比喻，標示為推論）</div>
+</section>
+
+<section class="slide" data-part="原理" data-wiki="concepts/nand-no-overwrite.md">
+  <div class="part">原理</div>
+  <h2>規則一：寫過的地方不能直接改</h2>
+  <div class="body">
+    <ul>
+      <li>SSD 用來存資料的晶片叫 <b>NAND Flash</b>。</li>
+      <li>它<b>不能直接覆寫</b>：已經寫了資料的位置，不能直接改成新內容。</li>
+      <li>想在同一個位置寫新資料，必須<b>先擦掉</b>舊資料。</li>
+      <li>而且能寫、能擦的次數有限（後面會再談）。</li>
+    </ul>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/nand-no-overwrite.md">Wiki › NAND 不能覆寫</a>（Wikipedia、The SSD Review）</div>
+</section>
+
+<section class="slide" data-part="原理" data-wiki="concepts/page-and-block.md">
+  <div class="part">原理</div>
+  <h2>規則二：一頁一頁寫，卻只能整本擦</h2>
+  <div class="body cols">
+    <div>
+      <ul>
+        <li>寫入的單位是 <b>page（頁）</b>。</li>
+        <li>擦除的單位是 <b>block（整本）</b>，一個 block 由很多 page 組成。</li>
+        <li>「寫」和「擦」的大小不一樣，就是寫入放大的根源。</li>
+      </ul>
+    </div>
+    <svg viewBox="0 0 420 300" role="img" aria-label="一本筆記本由多頁組成：寫入一次一頁，擦除一次整本">
+      <rect x="40" y="20" width="200" height="260" rx="12" fill="none" stroke="currentColor" stroke-width="3" opacity=".5"/>
+      <g>
+        <rect x="60" y="40" width="160" height="44" rx="6" fill="var(--valid)"/>
+        <rect x="60" y="94" width="160" height="44" rx="6" fill="var(--valid)"/>
+        <rect x="60" y="148" width="160" height="44" rx="6" fill="var(--new)"/>
+        <rect x="60" y="202" width="160" height="44" rx="6" fill="var(--stage)" stroke="var(--line)" stroke-width="2"/>
+      </g>
+      <text x="260" y="176" font-size="22">← 寫：一次一頁</text>
+      <text x="260" y="40" font-size="22">擦：整本一起</text>
+      <path d="M250 50 L250 270" stroke="var(--accent-2)" stroke-width="4"/>
+    </svg>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/page-and-block.md">Wiki › Page 與 Block</a>（Wikipedia、The SSD Review）</div>
+</section>
+
+<section class="slide" data-part="原理" data-wiki="concepts/garbage-collection.md">
+  <div class="part">原理</div>
+  <h2>刪掉檔案時，SSD 其實不知道</h2>
+  <div class="body cols">
+    <div class="card">
+      <h3>作業系統（電腦）</h3>
+      <p>刪檔時只在<b>自己的表格</b>上把那塊空間標成「空的」。</p>
+    </div>
+    <div class="card warm">
+      <h3>SSD</h3>
+      <p>要等電腦之後再寫到同一個位置，才知道那筆資料已經沒用了。在那之前，它會把資料當成<b>還有用</b>。</p>
+    </div>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/garbage-collection.md">Wiki › 垃圾回收</a>（The SSD Review）</div>
+</section>
+
+<section class="slide" data-part="原理" data-wiki="concepts/garbage-collection.md,explainers/notebook-analogy.md">
+  <div class="part">原理</div>
+  <h2>垃圾回收（GC）：先搬家，再整本擦掉</h2>
+  <div class="body">
+    <p class="lead">情境（示意）：一本 4 頁的筆記本已寫滿，其中 1 頁過期。現在要寫 1 頁新內容，但沒有空白頁了。</p>
+    <div class="steps">
+      <div class="step"><b>①</b><p>找一本快滿、但有過期頁的筆記本</p></div>
+      <div class="step"><b>②</b><p>把還有效的 3 頁抄到新本子</p></div>
+      <div class="step"><b>③</b><p>把舊本子整本清空</p></div>
+      <div class="step"><b>④</b><p>新內容寫進空出來的頁</p></div>
+    </div>
+    <p class="lead">步驟 ② 的抄寫，不是你要求的，是 SSD 自己做的。</p>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/garbage-collection.md">Wiki › 垃圾回收</a>、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/explainers/notebook-analogy.md">筆記本比喻</a>（數字為教學示意）</div>
+</section>
+
+<section class="slide" data-part="代價" data-wiki="concepts/write-amplification.md,explainers/notebook-analogy.md">
+  <div class="part">代價</div>
+  <h2>寫入放大怎麼算？</h2>
+  <div class="formula">寫入放大（WAF）= SSD 實際寫進晶片的量 ÷ 你要求寫的量</div>
+  <div class="cols">
+    <div class="card">
+      <h3>廠商的例子</h3>
+      <p>你寫 4GB，SSD 實際寫了 5GB<br>WAF = 5 ÷ 4 = <b>1.25</b></p>
+    </div>
+    <div class="card warm">
+      <h3>剛才的筆記本</h3>
+      <p>你只要求寫 1 頁，SSD 寫了 3 + 1 = 4 頁<br>WAF = 4 ÷ 1 = <b>4</b>（示意）</p>
+    </div>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/write-amplification.md">Wiki › 寫入放大</a>（SNIA、Solidigm）、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/explainers/notebook-analogy.md">筆記本比喻</a></div>
+</section>
+
+<section class="slide" data-part="代價" data-wiki="concepts/write-amplification.md">
+  <div class="part">代價</div>
+  <h2>什麼時候寫入放大最嚴重？</h2>
+  <div class="body cols">
+    <div class="card">
+      <h3>循序寫入</h3>
+      <p>資料一路依序寫下去<br>WAF 約為 1</p>
+    </div>
+    <div class="card warm">
+      <h3>大量隨機寫入</h3>
+      <p>到處改一點點<br>WAF 大於 1</p>
+    </div>
+  </div>
+  <p class="lead">沒有壓縮功能時，WAF 不會低於 1（有廠商宣稱用壓縮可到 0.5）。</p>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/write-amplification.md">Wiki › 寫入放大</a>（Solidigm、Wikipedia）</div>
+</section>
+
+<section class="slide" data-part="代價" data-wiki="concepts/endurance.md">
+  <div class="part">代價</div>
+  <h2>多寫的每一次，都在消耗壽命</h2>
+  <div class="body">
+    <ul>
+      <li>Flash 能「寫入＋擦除」的次數有限，叫做 <b>P/E 次數</b>。</li>
+      <li>GC 搬資料雖然不是你要求的，一樣會用掉這些次數。</li>
+      <li>所以寫入放大越低，越省壽命，也越理想。</li>
+    </ul>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/endurance.md">Wiki › 壽命與 P/E 次數</a>（Wikipedia、The SSD Review）</div>
+</section>
+
+<section class="slide" data-part="解法" data-wiki="concepts/trim.md,explainers/notebook-analogy.md">
+  <div class="part">解法</div>
+  <h2>解法一：TRIM，主動告訴 SSD 哪些沒用了</h2>
+  <div class="body cols">
+    <ul>
+      <li>刪檔時，電腦順便通知 SSD：「這些位置的資料不要了」。</li>
+      <li>SSD 就知道可以擦除，不必再把它們當成有效資料搬家。</li>
+      <li>研究指出，TRIM 的效果就像多了預留空間。</li>
+    </ul>
+    <div class="card">
+      <h3>回到筆記本</h3>
+      <p>如果 4 頁中有 3 頁已知過期，只要抄 1 頁 + 寫 1 頁 = 2 頁，WAF 從 4 降到 2（示意）。</p>
+    </div>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/trim.md">Wiki › TRIM</a>（Wikipedia、The SSD Review、Frankie 2012）、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/explainers/notebook-analogy.md">筆記本比喻</a></div>
+</section>
+
+<section class="slide" data-part="解法" data-wiki="concepts/over-provisioning.md">
+  <div class="part">解法</div>
+  <h2>解法二：Over-provisioning，預留空白頁</h2>
+  <div class="body">
+    <ul>
+      <li>廠商故意保留一部分容量<b>不給你用</b>，你在電腦上看不到它。</li>
+      <li>這些空間是 GC 搬資料時的工作區，讓 SSD 隨時有空白筆記本可用。</li>
+      <li>效果：寫入放大降低、效能更穩定、壽命更長。</li>
+    </ul>
+    <div class="cols">
+      <div class="card"><h3>讀取為主的產品</h3><p>一般預留 7%</p></div>
+      <div class="card warm"><h3>寫入很多的產品</h3><p>一般預留 28%</p></div>
+    </div>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/over-provisioning.md">Wiki › Over-provisioning</a>（Kingston 產品規格、Wikipedia）</div>
+</section>
+
+<section class="slide" data-part="解法" data-wiki="concepts/write-amplification.md,concepts/trim.md,concepts/over-provisioning.md">
+  <div class="part">解法</div>
+  <h2>解法三：寫入方式越循序越好</h2>
+  <div class="body">
+    <table>
+      <tr><th>解法</th><th>做法</th><th>為什麼有用</th></tr>
+      <tr><td>TRIM</td><td>刪檔時通知 SSD</td><td>少搬已經沒用的資料</td></tr>
+      <tr><td>Over-provisioning</td><td>預留看不到的空間</td><td>GC 隨時有工作區</td></tr>
+      <tr><td>循序寫入</td><td>資料依序寫下去</td><td>WAF 約為 1</td></tr>
+    </table>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/write-amplification.md">Wiki › 寫入放大</a>、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/trim.md">TRIM</a>、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/over-provisioning.md">Over-provisioning</a></div>
+</section>
+
+<section class="slide" data-part="測驗" data-wiki="concepts/page-and-block.md,concepts/write-amplification.md,concepts/trim.md">
+  <div class="part">測驗</div>
+  <h2>三題小測驗</h2>
+  <div class="body">
+    <p>一、SSD 寫入以什麼為單位？擦除以什麼為單位？</p>
+    <details><summary>看答案</summary>寫入以 page（頁）為單位，擦除以 block（整本）為單位。</details>
+    <p>二、你寫了 4GB，SSD 實際寫了 5GB，寫入放大是多少？</p>
+    <details><summary>看答案</summary>5 ÷ 4 = 1.25。</details>
+    <p>三、TRIM 告訴 SSD 什麼？為什麼能減少寫入放大？</p>
+    <details><summary>看答案</summary>告訴 SSD 哪些位置的資料已經不要了，SSD 就不必在 GC 時搬它們。</details>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/page-and-block.md">Wiki › Page 與 Block</a>、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/write-amplification.md">寫入放大</a>、<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/concepts/trim.md">TRIM</a></div>
+</section>
+
+<section class="slide" data-part="總結" data-wiki="overview.md">
+  <div class="part">總結</div>
+  <h2>一張圖帶走</h2>
+  <div class="body">
+    <div class="chain">
+      <span>寫過不能改</span><i>→</i><span>只能整本擦</span><i>→</i><span>擦之前先搬家（GC）</span><i>→</i><span>多寫（寫入放大）</span><i>→</i><span>壽命變短</span>
+    </div>
+    <p class="lead" style="text-align:center">減少方法：TRIM 讓 SSD 少搬、Over-provisioning 預留工作區、盡量循序寫入</p>
+  </div>
+  <div class="src">來源：<a href="https://github.com/CtyceT/ssd-waf-wiki/blob/main/wiki/overview.md">Wiki › 總覽</a>（本簡報所有內容皆來自本專案 LLM Wiki）</div>
+</section>
+
+</div></div>
+
+<div class="controls">
+  <button id="prev" aria-label="上一張">‹</button>
+  <span class="counter nocheck" id="counter"></span>
+  <button id="next" aria-label="下一張">›</button>
+</div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var deck = document.getElementById("deck");
+  var i = 0;
+  var fromHash = parseInt(location.hash.slice(1), 10);
+  if (fromHash >= 1 && fromHash <= slides.length) i = fromHash - 1;
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1320, window.innerHeight / 760);
+    deck.style.transform = "translate(-50%, -50%) scale(" + s + ")";
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (el, k) { el.classList.toggle("active", k === i); });
+    document.getElementById("counter").textContent = (i + 1) + " / " + slides.length;
+    document.getElementById("progress").style.width = ((i + 1) / slides.length * 100) + "%";
+    history.replaceState(null, "", "#" + (i + 1));
+  }
+  document.getElementById("prev").onclick = function () { show(i - 1); };
+  document.getElementById("next").onclick = function () { show(i + 1); };
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); show(i + 1); }
+    if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); show(i - 1); }
+  });
+  var x0 = null;
+  document.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; });
+  document.addEventListener("touchend", function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 40) show(i + (dx < 0 ? 1 : -1));
+    x0 = null;
+  });
+  window.addEventListener("resize", fit);
+  fit(); show(i);
+})();
+</script>
+</body>
+</html>
